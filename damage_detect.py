@@ -2,68 +2,80 @@ import cv2 as cv
 import numpy as np
 
 def rescaleFrame(frame, scale=0.6):
-    """Rescales a frame (image or video) by a given scale factor."""
     width = int(frame.shape[1] * scale)
     height = int(frame.shape[0] * scale)
     dimensions = (width, height)
     return cv.resize(frame, dimensions, interpolation=cv.INTER_AREA)
 
 def get_roi(frame):
-    """Extracts a polygon-shaped region of interest (ROI) from the given frame."""
-    # Define the polygon vertices
     pts = np.array([[845, 14], [530, 1780], [2306, 1750], [1841, 7]], np.int32)
     pts = pts.reshape((-1, 1, 2))
-
-    # Create a mask for the ROI
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
     cv.fillPoly(mask, [pts], 255)
-
-    # Apply the mask to the frame
     roi = cv.bitwise_and(frame, frame, mask=mask)
-
-    # Get the bounding rectangle of the ROI
     x, y, w, h = cv.boundingRect(pts)
     cropped_roi = roi[y:y+h, x:x+w]
-
     return cropped_roi, (x, y), pts
 
-# Load the video
-capture = cv.VideoCapture(r"D:\programs\Python\hackathon_nirma\Usecase_Dataset\Usecase_Dataset\IN\2.mp4")
+def classify_damage(area):
+    if area < 500:
+        return "small"
+    elif 500 <= area < 1500:
+        return "medium"
+    else:
+        return "large"
 
-# Check if the video is opened successfully
+def process_frame(frame, damage_summary):
+    roi_frame, (x_offset, y_offset), pts = get_roi(frame)
+    gray = cv.cvtColor(roi_frame, cv.COLOR_BGR2GRAY)
+    blur = cv.GaussianBlur(gray, (5, 5), 0)
+    canny = cv.Canny(blur, 180, 230)
+    contours, _ = cv.findContours(canny, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
+    
+    for contour in contours:
+        area = cv.contourArea(contour)
+        if area > 100:
+            x, y, w, h = cv.boundingRect(contour)
+            damage_severity = classify_damage(area)
+            wagon_id = f'wagon{x // 500 + 1}'
+            if wagon_id not in damage_summary:
+                damage_summary[wagon_id] = []
+            damage_summary[wagon_id].append(damage_severity)
+            
+            cv.drawContours(roi_frame, [contour], -1, (0, 255, 0), 2)
+            cv.putText(roi_frame, damage_severity, (x, y-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    
+    return roi_frame
+
+def get_highest_damage(damage_list):
+    if "large" in damage_list:
+        return "large"
+    elif "medium" in damage_list:
+        return "medium"
+    else:
+        return "small"
+
+capture = cv.VideoCapture('D:/Education Related/JK Lakshmi/Usecase_Dataset/Usecase_Dataset/IN/2.mp4')
 if not capture.isOpened():
     print('Error: Unable to open the video')
     exit(0)
 
+damage_summary = {}
+
 while True:
-    # Read a frame from the video
     isTrue, frame = capture.read()
     if not isTrue:
         print("Error: Unable to read the frame.")
         break
-
-    # Resize the frame
-    frame_resized = rescaleFrame(frame)
-
-    # Extract the Region of Interest (ROI)
-    roi_frame, (x_offset, y_offset), pts = get_roi(frame)
-
-    # Convert to grayscale and detect edges
-    gray = cv.cvtColor(roi_frame, cv.COLOR_BGR2GRAY)
-    blur = cv.GaussianBlur(gray, (5, 5), 0)
-    canny = cv.Canny(blur, 180, 230)
-
-    # Find and draw contours on the ROI frame
-    contours, hierarchy = cv.findContours(canny, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
-    cv.drawContours(roi_frame, contours, -1, (0, 0, 255), 1)
-
-    # Display the processed ROI frame
-    cv.imshow('Contours on ROI', roi_frame)
-
-    # Exit on pressing 'd'
-    if cv.waitKey(20) & 0xFF == ord('d'):
+    
+    processed_frame = process_frame(frame, damage_summary)
+    cv.imshow('Processed Frame', processed_frame)
+    
+    if cv.waitKey(1) & 0xFF == ord('d'):
         break
 
-# Release resources
 capture.release()
 cv.destroyAllWindows()
+
+for wagon, damages in damage_summary.items():
+    print(f"{wagon}: {get_highest_damage(damages)}")
