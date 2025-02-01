@@ -1,8 +1,9 @@
 # jk_laxmi_task
 
-The repo consist of 2 python files
-1. Damage_detet.py
-2. Volume_measure.py
+Files in this Repository
+Damage_detect.py
 
-On running the "Damage_detect.py" it will mark all the damage present in the wagon 
-and on running "Volume_measure.py" it will measure the volume of content present in the wagon.
+This script detects and marks the damage present in the wagons. When run, it processes video frames to identify damaged areas and highlights them.
+Volume_measure.py
+
+This script measures the volume of the content present in the wagon. It uses image or video processing techniques to estimate the volume based on the visual data.
